@@ -46,7 +46,7 @@ An automated pipeline that processes livestream recordings and generates:
 | ID | Goal | Success Metric |
 |----|------|----------------|
 | G1 | Reduce post-production time | < 30 minutes of manual editing after automation |
-| G2 | Identify all clip-worthy moments | 90%+ of viral moments captured |
+| G2 | Identify all clip-worthy moments | Minimum 10 clips, 90%+ of viral moments captured |
 | G3 | Accurate Korean/English transcription | < 5% word error rate |
 | G4 | Seamless Premiere integration | One-click import, no manual adjustments needed |
 | G5 | Simple CLI interface | Single command to process a stream |
@@ -363,10 +363,41 @@ bitcoin, crypto, market analysis, trading, ...
 
 **Authentication:** API Key (Bearer token)
 
-**Request Flow:**
-1. Upload audio file or provide URL
-2. Poll for completion
-3. Retrieve transcript with timestamps
+**Local Processing Flow:**
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  LOCAL MACHINE                                                      │
+│  ┌─────────────┐      ┌─────────────┐      ┌─────────────┐         │
+│  │ full_stream │ ───► │   FFmpeg    │ ───► │  audio.wav  │         │
+│  │    .mp4     │      │  (extract)  │      │   (local)   │         │
+│  └─────────────┘      └─────────────┘      └──────┬──────┘         │
+│                                                   │                 │
+│                                    HTTP POST (audio bytes)          │
+│                                                   │                 │
+└───────────────────────────────────────────────────┼─────────────────┘
+                                                    ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  RETURN ZERO API                                                    │
+│  • Receives audio in request body                                   │
+│  • Processes transcription                                          │
+│  • Returns JSON transcript                                          │
+│  • No permanent storage - just processing                           │
+└───────────────────────────────────────────────────┼─────────────────┘
+                                                    │
+                                         JSON response (transcript)
+                                                    │
+┌───────────────────────────────────────────────────▼─────────────────┐
+│  LOCAL MACHINE                                                      │
+│  ┌─────────────────────┐                                            │
+│  │  transcript.json    │  ← Saved locally                          │
+│  │  (word timestamps)  │                                            │
+│  └─────────────────────┘                                            │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Note:** This is a standard API call, not cloud storage. Audio is sent in the
+request body, processed by Return Zero's servers, and the transcript is returned.
+No files are permanently stored on their servers.
 
 **Rate Limits:** TBD (check documentation)
 
@@ -427,9 +458,13 @@ analysis:
     max_chapters: 20          # Maximum chapters to generate
 
   shortform:
-    min_clip_duration: 15     # Minimum clip length (seconds)
-    max_clip_duration: 60     # Maximum clip length (seconds)
+    min_clips: 10             # Minimum clips to generate
+    max_clip_duration: 180    # Maximum clip length (seconds) - YouTube Shorts limit is 3 min
     max_clips: 30             # Maximum clips to extract
+
+    # Note: Clip length is context-driven, not arbitrary.
+    # Each clip should provide enough context for the viewer to understand the topic.
+    # No minimum duration - let the content dictate the length.
 
     # Content signals for viral detection
     viral_signals:
