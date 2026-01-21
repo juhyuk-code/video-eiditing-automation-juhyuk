@@ -1,0 +1,66 @@
+# Livestream Automation Configuration
+
+# Paths
+paths:
+  input_dir: "./input"          # Where livestream recordings are stored
+  output_dir: "./output"        # Where processed files will be saved
+  temp_dir: "./temp"            # Temporary processing files
+
+# Transcription settings
+transcription:
+  model: "large-v3"             # Whisper model: tiny, base, small, medium, large-v3
+  language: null                # null = auto-detect (good for Korean/English mix)
+  device: "auto"                # auto, cuda, cpu
+
+# Silence detection
+silence:
+  threshold_db: -40             # Audio level threshold for silence (in dB)
+  min_duration: 0.5             # Minimum silence duration to cut (seconds)
+  padding: 0.1                  # Padding to keep around speech (seconds)
+
+# Video settings
+video:
+  longform:
+    aspect_ratio: "16:9"
+    resolution: "1920x1080"
+  shortform:
+    aspect_ratio: "9:16"
+    resolution: "1080x1920"
+    max_duration: 60            # Max clip duration in seconds
+    min_duration: 15            # Min clip duration in seconds
+
+# Claude API settings for content analysis
+analysis:
+  model: "claude-sonnet-4-20250514"
+  max_tokens: 4096
+
+  # What to look for in long-form content
+  longform:
+    topic_min_duration: 60      # Minimum topic segment duration (seconds)
+
+  # What to look for in short-form/viral content
+  shortform:
+    indicators:
+      - "emotional reactions"
+      - "funny moments"
+      - "surprising revelations"
+      - "key insights"
+      - "quotable statements"
+      - "dramatic moments"
+      - "audience interaction highlights"
+
+# Caption settings
+captions:
+  style:
+    font: "Arial Bold"
+    size: 48
+    color: "#FFFFFF"
+    stroke_color: "#000000"
+    stroke_width: 2
+    position: "bottom"          # top, center, bottom
+
+# Adobe Premiere export settings
+premiere:
+  fps: 30                       # Timeline framerate
+  sample_rate: 48000            # Audio sample rate
+  timecode_start: "00:00:00:00"
