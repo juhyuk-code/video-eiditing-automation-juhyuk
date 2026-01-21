@@ -1,16 +1,9 @@
-# Livestream Automation Configuration
+# Stream Automation Configuration
 
 # Paths
 paths:
-  input_dir: "./input"          # Where livestream recordings are stored
-  output_dir: "./output"        # Where processed files will be saved
-  temp_dir: "./temp"            # Temporary processing files
-
-# Transcription settings
-transcription:
-  model: "large-v3"             # Whisper model: tiny, base, small, medium, large-v3
-  language: null                # null = auto-detect (good for Korean/English mix)
-  device: "auto"                # auto, cuda, cpu
+  output_dir: "./output"
+  temp_dir: "./temp"
 
 # Silence detection
 silence:
@@ -18,49 +11,50 @@ silence:
   min_duration: 0.5             # Minimum silence duration to cut (seconds)
   padding: 0.1                  # Padding to keep around speech (seconds)
 
-# Video settings
-video:
-  longform:
-    aspect_ratio: "16:9"
-    resolution: "1920x1080"
-  shortform:
-    aspect_ratio: "9:16"
-    resolution: "1080x1920"
-    max_duration: 60            # Max clip duration in seconds
-    min_duration: 15            # Min clip duration in seconds
+# Transcription settings (Return Zero API)
+transcription:
+  provider: "returnzero"
+  language_hints:
+    - "ko"
+    - "en"
 
 # Claude API settings for content analysis
 analysis:
   model: "claude-sonnet-4-20250514"
-  max_tokens: 4096
 
-  # What to look for in long-form content
   longform:
-    topic_min_duration: 60      # Minimum topic segment duration (seconds)
+    min_chapter_duration: 60    # Minimum chapter length (seconds)
+    max_chapters: 20            # Maximum chapters to generate
 
-  # What to look for in short-form/viral content
   shortform:
-    indicators:
-      - "emotional reactions"
-      - "funny moments"
-      - "surprising revelations"
-      - "key insights"
-      - "quotable statements"
-      - "dramatic moments"
-      - "audience interaction highlights"
+    min_clips: 10               # Minimum clips to generate
+    max_clip_duration: 180      # Max clip length (seconds) - YouTube Shorts limit
+    max_clips: 30               # Maximum clips to extract
 
-# Caption settings
-captions:
-  style:
-    font: "Arial Bold"
-    size: 48
-    color: "#FFFFFF"
-    stroke_color: "#000000"
-    stroke_width: 2
-    position: "bottom"          # top, center, bottom
+    # Content signals for viral detection (market/trading content)
+    viral_signals:
+      - "bold market predictions"
+      - "contrarian takes"
+      - "price calls"
+      - "I told you so moments"
+      - "surprising insights"
+      - "emotional reactions"
+
+# Video settings
+video:
+  shortform:
+    resolution: "1080x1920"     # 9:16 vertical
+    webcam_position: "top"      # top or bottom
+    webcam_height_ratio: 0.4    # 40% of frame for webcam
 
 # Adobe Premiere export settings
 premiere:
   fps: 30                       # Timeline framerate
   sample_rate: 48000            # Audio sample rate
   timecode_start: "00:00:00:00"
+
+# Caption settings
+captions:
+  formats:
+    - "srt"
+    - "vtt"
