@@ -56,7 +56,7 @@ A **fully automated web service** that:
 | G4 | Real-time status updates | Telegram notifications + web dashboard |
 | G5 | Accurate transcription | < 5% word error rate for Korean/English |
 | G6 | Seamless Premiere integration | One-click XML import, no adjustments needed |
-| G7 | Simple file naming | YYYYMMDD-stream/webcam/screen convention |
+| G7 | Simple file naming | YYYYMMDD folder with stream/webcam/screen files |
 
 ### 2.2 Non-Goals (v2.1)
 
@@ -87,16 +87,23 @@ A **fully automated web service** that:
 
 | File | Naming Pattern | Example |
 |------|----------------|---------|
-| Folder | `YYYYMMDD/` | `20250115/` |
+| Folder | `YYYYMMDD/` or `YYYYMMDD-N/` | `20250115/` or `20250115-2/` |
 | Full Stream | `stream.*` | `stream.mp4` |
 | Webcam | `webcam.*` | `webcam.mp4` |
 | Screen | `screen.*` | `screen.mp4` |
 
+**Multiple Streams Per Day:**
+- First stream: `20250115/`
+- Second stream: `20250115-2/`
+- Third stream: `20250115-3/`
+
 **Detection Logic:**
-- System scans for folders matching `YYYYMMDD` pattern (8 digits)
+- System scans for folders matching `YYYYMMDD` or `YYYYMMDD-N` pattern
 - Inside each folder, looks for `stream.*` file (required)
 - Webcam and screen files are optional (for future short-form feature)
 - Folders with an existing `output/` subfolder are skipped (already processed)
+
+**Upload Method:** Manual upload to Google Drive after each stream
 
 ### 3.2 Audio Processing
 
@@ -171,7 +178,7 @@ A **fully automated web service** that:
 ```
 📁 StreamAutomation/
 │
-├── 📁 20250115/                           ← Jan 15 stream folder
+├── 📁 20250115/                           ← Jan 15 stream (first)
 │   ├── 📄 stream.mp4                      ← Main stream (required)
 │   ├── 📄 webcam.mp4                      ← Webcam (optional, for future)
 │   ├── 📄 screen.mp4                      ← Screen (optional, for future)
@@ -185,7 +192,12 @@ A **fully automated web service** that:
 │       ├── 📄 transcript.json             ← Word-level timestamps
 │       └── 📄 transcript.txt              ← Plain text
 │
-├── 📁 20250116/                           ← Jan 16 stream folder
+├── 📁 20250115-2/                         ← Jan 15 stream (second)
+│   ├── 📄 stream.mp4
+│   └── 📁 output/
+│       └── ...
+│
+├── 📁 20250116/                           ← Jan 16 stream
 │   ├── 📄 stream.mp4
 │   └── 📁 output/
 │       └── ...
@@ -195,10 +207,15 @@ A **fully automated web service** that:
 ```
 
 **Why this structure:**
-- One folder per stream day - everything in one place
+- One folder per stream - everything in one place
+- Multiple streams per day supported (append -2, -3, etc.)
 - Simple file names (no date prefix needed)
-- Easy to find: just look for the date folder
 - Re-process by deleting the `output/` subfolder
+
+**Premiere Workflow:**
+1. Download the entire stream folder (e.g., `20250115/`)
+2. Open Premiere → File → Import → Select `output/timeline.xml`
+3. Timeline uses **relative paths** (`../stream.mp4`) so files auto-link
 
 ### 4.2 suggestions.md Format
 
@@ -684,7 +701,7 @@ CREATE TABLE jobs (
     silence_removed FLOAT,
 
     -- Output info
-    output_folder_id VARCHAR(255),     -- _output subfolder ID
+    output_folder_id VARCHAR(255),     -- output/ subfolder ID
 
     -- Results
     chapters_count INTEGER,
@@ -916,7 +933,10 @@ streamauto.app/jobs/abc123
 | Storage retention | User manages their own Google Drive |
 | Languages | Korean and English only |
 | File naming | stream/webcam/screen inside YYYYMMDD folder |
-| Folder structure | YYYYMMDD folder with output/ subfolder |
+| Folder structure | YYYYMMDD or YYYYMMDD-N folder with output/ subfolder |
+| Multiple streams/day | Use -2, -3 suffix (e.g., 20250115-2/) |
+| Upload method | Manual upload to Google Drive |
+| Timeline paths | Relative paths (download folder, then import) |
 | Scope | Long-form only (short-form in future v3.0) |
 
 ---
