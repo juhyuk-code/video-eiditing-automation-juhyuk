@@ -56,7 +56,7 @@ A **fully automated web service** that:
 | G4 | Real-time status updates | Telegram notifications + web dashboard |
 | G5 | Accurate transcription | < 5% word error rate for Korean/English |
 | G6 | Seamless Premiere integration | One-click XML import, no adjustments needed |
-| G7 | Flexible file naming | No specific naming convention required |
+| G7 | Simple file naming | YYYYMMDD-stream/webcam/screen convention |
 
 ### 2.2 Non-Goals (v2.1)
 
@@ -77,18 +77,25 @@ A **fully automated web service** that:
 
 | Feature | Description |
 |---------|-------------|
-| **Video Source** | Single composited stream file (full_stream) |
+| **Video Source** | Single composited stream file |
 | **Auto-sync** | OBS Source Record plugin ensures sync (webcam/screen optional for future) |
 | **Format Support** | MP4, MOV, MKV (H.264, H.265, ProRes) |
-| **Google Drive Watch** | Auto-detect new stream folders |
+| **Google Drive Watch** | Auto-detect new stream files |
 | **Upload Validation** | Wait for files to finish uploading before processing |
-| **Flexible File Naming** | No naming constraints - any video file name accepted |
 
-**File Detection Logic:**
-- System scans each new folder for video files (.mp4, .mov, .mkv)
-- The **largest video file** in the folder is treated as the main stream
-- Folder name becomes the stream name (e.g., `2025-01-15 Market Analysis/`)
-- No specific naming convention required for input files
+**File Naming Convention (Required):**
+
+| File | Naming Pattern | Example |
+|------|----------------|---------|
+| Full Stream | `YYYYMMDD-stream.*` | `20250115-stream.mp4` |
+| Webcam | `YYYYMMDD-webcam.*` | `20250115-webcam.mp4` |
+| Screen | `YYYYMMDD-screen.*` | `20250115-screen.mp4` |
+
+**Detection Logic:**
+- System scans for files matching `*-stream.*` pattern
+- Date prefix (YYYYMMDD) becomes the stream identifier
+- Webcam and screen files are optional (for future short-form feature)
+- Files without the correct naming pattern are ignored
 
 ### 3.2 Audio Processing
 
@@ -158,32 +165,37 @@ A **fully automated web service** that:
 
 ### 4.1 Google Drive Folder Structure
 
-**Key Design Decision:** Inputs and outputs live in the **same folder** per stream to prevent confusion.
+**Key Design Decision:** All files for a stream share the same date prefix. Outputs are placed in an `_output/` subfolder.
 
 ```
 📁 StreamAutomation/
 │
-└── 📁 2025-01-15 Market Analysis/         ← One folder per stream
+├── 📄 20250115-stream.mp4                 ← Main stream (required)
+├── 📄 20250115-webcam.mp4                 ← Webcam (optional, for future)
+├── 📄 20250115-screen.mp4                 ← Screen (optional, for future)
+│
+├── 📄 20250116-stream.mp4                 ← Another day's stream
+│
+└── 📁 _output/                            ← All generated outputs
     │
-    │── 📄 stream_recording.mp4            ← Input (any filename)
-    │── 📄 webcam.mp4                      ← Optional input
-    │── 📄 screen.mp4                      ← Optional input
+    ├── 📁 20250115/                       ← Outputs for Jan 15 stream
+    │   ├── 📄 timeline.xml                ← Import to Premiere
+    │   ├── 📄 captions.srt                ← Full subtitles
+    │   ├── 📄 captions.vtt                ← YouTube format
+    │   ├── 📄 chapters.txt                ← YouTube chapters
+    │   ├── 📄 suggestions.md              ← Titles, thumbnails, tags
+    │   ├── 📄 transcript.json             ← Word-level timestamps
+    │   └── 📄 transcript.txt              ← Plain text
     │
-    └── 📁 _output/                        ← Generated outputs (prefixed with _)
-        ├── 📄 timeline.xml                ← Import to Premiere
-        ├── 📄 captions.srt                ← Full subtitles
-        ├── 📄 captions.vtt                ← YouTube format
-        ├── 📄 chapters.txt                ← YouTube chapters
-        ├── 📄 suggestions.md              ← Titles, thumbnails, tags
-        ├── 📄 transcript.json             ← Word-level timestamps
-        └── 📄 transcript.txt              ← Plain text
+    └── 📁 20250116/                       ← Outputs for Jan 16 stream
+        └── ...
 ```
 
 **Why this structure:**
-- No confusion about which outputs belong to which stream
-- Easy to share a single stream folder with editors
-- `_output/` prefix keeps generated files visually grouped
-- Simple to re-process: just delete `_output/` folder and re-trigger
+- Clear date-based organization
+- Easy to identify which files go together
+- Simple naming: just use the date
+- Re-process by deleting `_output/YYYYMMDD/` folder
 
 ### 4.2 suggestions.md Format
 
@@ -242,8 +254,9 @@ technical analysis, price prediction, bull run, crypto news
 │  │  OBS Studio │ ──────► │              Google Drive                    │    │
 │  │  (Records)  │  sync   │                                              │    │
 │  └─────────────┘         │  📁 StreamAutomation/                        │    │
-│                          │    📁 2025-01-15 Market Analysis/            │    │
-│                          │      📄 stream.mp4  (any filename)           │    │
+│                          │    📄 20250115-stream.mp4                    │    │
+│                          │    📄 20250115-webcam.mp4  (optional)        │    │
+│                          │    📄 20250115-screen.mp4  (optional)        │    │
 │                          └─────────────────────────────────────────────┘    │
 │                                                                              │
 │  ┌─────────────┐                                                            │
@@ -306,12 +319,12 @@ technical analysis, price prediction, bull run, crypto news
 
 Step 1: DETECT (File Watcher - runs every 60 seconds)
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  • List folders in Google Drive /StreamAutomation/                          │
-│  • For each folder without _output subfolder:                               │
-│    - Scan for video files (.mp4, .mov, .mkv)                                │
-│    - Select largest video file as main stream                               │
+│  • Scan Google Drive /StreamAutomation/ for files matching *-stream.*       │
+│  • For each stream file found:                                              │
+│    - Extract date from filename (YYYYMMDD)                                  │
+│    - Check if _output/YYYYMMDD/ folder exists (already processed)           │
 │    - Validate file is fully uploaded (size stable for 60s)                  │
-│  • If ready → Create job → Send to queue → Notify Telegram                  │
+│  • If new stream found → Create job → Send to queue → Notify Telegram       │
 └─────────────────────────────────────────────────────────────────────────────┘
                                           │
                                           ▼
@@ -369,8 +382,8 @@ Step 6: GENERATE OUTPUTS
                                           ▼
 Step 7: UPLOAD & COMPLETE
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  • Create _output subfolder in same stream folder                           │
-│  • Upload all generated files                                               │
+│  • Create _output/YYYYMMDD/ subfolder (e.g., _output/20250115/)             │
+│  • Upload all generated files to that folder                                │
 │  • Update job status: "Completed" (100%)                                    │
 │  • Send Telegram notification with summary                                  │
 │  • Clean up temporary files                                                 │
@@ -655,9 +668,10 @@ CREATE TABLE jobs (
     error_message TEXT,
 
     -- Input files (Google Drive IDs)
-    folder_id VARCHAR(255),            -- Stream folder ID
-    main_video_file_id VARCHAR(255),   -- Largest video file (auto-detected)
-    main_video_filename VARCHAR(255),  -- Original filename
+    stream_date VARCHAR(8) NOT NULL,   -- YYYYMMDD from filename
+    stream_file_id VARCHAR(255),       -- YYYYMMDD-stream.* file ID
+    webcam_file_id VARCHAR(255),       -- YYYYMMDD-webcam.* file ID (optional)
+    screen_file_id VARCHAR(255),       -- YYYYMMDD-screen.* file ID (optional)
 
     -- Duration info
     original_duration FLOAT,
@@ -896,7 +910,7 @@ streamauto.app/jobs/abc123
 | Re-processing | Yes, with ability to change settings |
 | Storage retention | User manages their own Google Drive |
 | Languages | Korean and English only |
-| File naming | No constraints - largest video file auto-detected |
+| File naming | YYYYMMDD-stream/webcam/screen convention |
 | Folder structure | Inputs and outputs in same folder |
 | Scope | Long-form only (short-form in future v3.0) |
 
