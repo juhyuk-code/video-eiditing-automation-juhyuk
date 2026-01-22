@@ -5,39 +5,44 @@
 **Author:** Juhyuk
 **Last Updated:** 2025-01-22
 **Status:** Draft
+**Monthly Budget:** $100 USD
 
 ---
 
 ## 1. Executive Summary
 
-### 1.1 Problem Statement (Revised)
+### 1.1 Problem Statement
 
-The CLI-based approach requires:
-- Manual execution after each stream
-- Local machine to be running
-- Technical knowledge to operate
-- Manual file management
+Creating content from livestreams is a time-consuming manual process. After each stream, the creator must:
+- Manually sync multiple video sources
+- Scrub through hours of footage to find silence gaps
+- Identify clip-worthy moments for short-form content
+- Create separate timelines for long-form and short-form
+- Write captions, titles, and chapter timestamps
+- Design thumbnails
 
-A web-based service with Google Drive integration would:
-- Automatically detect new recordings
-- Process without user intervention
-- Work from any device
-- Organize outputs automatically
+This process can take 3-5+ hours per livestream, limiting content output and creator productivity.
 
 ### 1.2 Solution
 
-A web application that:
+A **fully automated web service** that:
 1. **Watches** a Google Drive folder for new OBS recordings
-2. **Automatically processes** detected files (transcription, analysis, Premiere export)
+2. **Automatically processes** detected files:
+   - Transcribes (Korean/English via Return Zero API)
+   - Removes silences
+   - Identifies chapters for long-form content
+   - Detects viral moments for short-form clips
+   - Generates Adobe Premiere timelines
+   - Creates captions, titles, and thumbnail suggestions
 3. **Uploads outputs** to organized Google Drive folders
-4. **Notifies** the user when processing is complete
+4. **Notifies** via Telegram when processing is complete
 
 ### 1.3 Target User
 
 - **Primary:** Juhyuk (solo creator)
 - **Content Type:** Market analysis, trading insights, financial commentary
-- **Languages:** Korean and English
-- **Workflow:** Records with OBS → Files sync to Google Drive → Service handles the rest
+- **Languages:** Korean and English (code-switching)
+- **Workflow:** Records with OBS → Files sync to Google Drive → Service handles everything automatically
 
 ---
 
@@ -47,70 +52,318 @@ A web application that:
 
 | ID | Goal | Success Metric |
 |----|------|----------------|
-| G1 | Zero-touch processing | No manual intervention after OBS recording |
+| G1 | Zero-touch processing | No manual intervention after OBS recording stops |
 | G2 | Cloud-based workflow | Process from any device, anywhere |
 | G3 | Automatic file organization | Inputs/outputs organized in Google Drive |
-| G4 | Real-time status updates | Know processing status without checking |
+| G4 | Real-time status updates | Telegram notifications + web dashboard |
 | G5 | Minimum 10 viral clips | At least 10 short-form clips per stream |
+| G6 | Accurate transcription | < 5% word error rate for Korean/English |
+| G7 | Seamless Premiere integration | One-click XML import, no adjustments needed |
 
 ### 2.2 Non-Goals (v2.0)
 
 | ID | Non-Goal | Reason |
 |----|----------|--------|
 | NG1 | Multi-user support | Single-user service for now |
-| NG2 | Mobile app | Web app is sufficient |
+| NG2 | Mobile app | Web app + Telegram is sufficient |
 | NG3 | Direct YouTube/TikTok upload | Keep human in the loop for final review |
 | NG4 | Real-time streaming processing | Focus on post-stream workflow |
-| NG5 | Self-hosted option | Cloud-first approach |
+| NG5 | Automatic thumbnail image generation | Provide concepts only |
 
 ---
 
-## 3. User Stories
+## 3. Core Features (Complete List)
 
-### 3.1 Primary Workflow
+### 3.1 Input Processing
 
+| Feature | Description |
+|---------|-------------|
+| **3 Video Sources** | full_stream (composited), webcam (face), screen (computer) |
+| **Auto-sync** | All 3 sources synced via OBS Source Record plugin |
+| **Format Support** | MP4, MOV, MKV (H.264, H.265, ProRes) |
+| **Google Drive Watch** | Auto-detect new recordings in /Input folder |
+| **Upload Validation** | Wait for files to finish uploading before processing |
+
+### 3.2 Audio Processing
+
+| Feature | Description |
+|---------|-------------|
+| **Audio Extraction** | Extract audio from full_stream via FFmpeg |
+| **Silence Detection** | FFmpeg silencedetect filter |
+| **Configurable Threshold** | Default: -40 dB |
+| **Configurable Min Duration** | Default: 0.5 seconds |
+| **Padding** | Keep 0.1s around speech to avoid harsh cuts |
+
+### 3.3 Transcription (Return Zero API)
+
+| Feature | Description |
+|---------|-------------|
+| **Korean Optimization** | Return Zero's "sommers" model for Korean |
+| **English Support** | Handles Korean/English code-switching |
+| **Word-level Timestamps** | Precise timing for each word |
+| **Language Detection** | Auto-detect language per segment |
+| **Output Formats** | JSON (full), TXT (plain), SRT, VTT |
+
+### 3.4 Long-Form Analysis (Claude API)
+
+| Feature | Description |
+|---------|-------------|
+| **Chapter Detection** | Identify topic changes for YouTube chapters |
+| **Min Chapter Duration** | 60 seconds minimum |
+| **Max Chapters** | Up to 20 chapters per stream |
+| **Chapter Data** | title, start, end, summary, keywords |
+| **Title Ideas** | 5 YouTube title suggestions (SEO-optimized) |
+| **Thumbnail Concepts** | 3 visual concepts for thumbnails |
+| **Tags** | 10-15 relevant YouTube tags |
+| **Description Template** | Ready-to-use video description |
+| **Stream Summary** | 2-3 sentence overview |
+
+### 3.5 Short-Form Analysis (Claude API)
+
+| Feature | Description |
+|---------|-------------|
+| **Viral Moment Detection** | AI identifies clip-worthy moments |
+| **Minimum Clips** | At least 10 clips per stream |
+| **Maximum Clips** | Up to 30 clips |
+| **Clip Duration** | Up to 180 seconds (YouTube Shorts limit) |
+| **Context-Driven Length** | No minimum - clip length based on content context |
+| **No Overlap** | Clips do not overlap with each other |
+
+#### 3.5.1 Viral Clip Categories
+
+| Category | Description | Detection Signals |
+|----------|-------------|-------------------|
+| `bold_prediction` | Strong market calls, price predictions | "I think...", "This will...", definitive language |
+| `insight` | Unique analysis, contrarian takes | "What people don't realize...", "The key here is..." |
+| `reaction` | Emotional responses to market moves | Exclamations, tone shifts |
+| `explanation` | Clear educational moments | "Let me explain...", "Here's how this works..." |
+| `callout` | Validating past predictions | "I told you...", "Remember when I said..." |
+
+#### 3.5.2 Viral Signals (Configurable)
+
+Default signals for market/trading content:
+- Bold market predictions
+- Contrarian takes
+- Price calls
+- "I told you so" moments
+- Surprising insights
+- Emotional reactions
+
+#### 3.5.3 Clip Metadata
+
+Each clip includes:
+```json
+{
+  "id": "clip_001",
+  "start": 932.5,
+  "end": 975.2,
+  "duration": 42.7,
+  "transcript": "This is exactly why I said Bitcoin would...",
+  "category": "bold_prediction",
+  "viral_score": 0.92,
+  "title_suggestions": [
+    "I Called It - Bitcoin's Next Move",
+    "Why Everyone Got This Wrong"
+  ],
+  "hook": "This is exactly why I said...",
+  "context": "Strong conviction call that proved correct"
+}
 ```
-AS A content creator
-I WANT my recordings to be automatically processed when I upload them to Google Drive
-SO THAT I can focus on creating content while the tedious editing work happens automatically
+
+### 3.6 Adobe Premiere Export (FCP7 XML)
+
+#### 3.6.1 Long-Form Timeline (16:9)
+
+| Track | Content |
+|-------|---------|
+| V1 | `full_stream` video with silences removed |
+| A1 | `full_stream` audio synced with cuts |
+| Markers | Chapter markers at topic transitions |
+
+**Output:** `timeline.xml` - Import directly into Premiere
+
+#### 3.6.2 Short-Form Timeline (9:16)
+
+| Track | Content |
+|-------|---------|
+| V1 | `webcam` video (top 40% of frame) |
+| V2 | `screen` video (bottom 60% of frame) |
+| A1 | Audio from `full_stream` |
+| Markers | Clip boundaries |
+
+**Layout:**
+```
+┌─────────────┐
+│   WEBCAM    │  ← 40% height (face, reactions)
+│─────────────│
+│             │
+│   SCREEN    │  ← 60% height (charts, content)
+│             │
+└─────────────┘
+    1080x1920 (9:16)
 ```
 
-### 3.2 Detailed User Stories
+**Output:** `timeline.xml` - All clips in sequence with markers
 
-| ID | User Story | Priority |
-|----|------------|----------|
-| US1 | As a creator, I want to drop my OBS recordings into a Google Drive folder and have them auto-processed | P0 |
-| US2 | As a creator, I want to see the processing status on a web dashboard | P0 |
-| US3 | As a creator, I want outputs automatically organized in my Google Drive | P0 |
-| US4 | As a creator, I want to be notified (email/push) when processing is complete | P1 |
-| US5 | As a creator, I want to review and re-process clips if needed | P1 |
-| US6 | As a creator, I want to customize viral detection settings | P2 |
-| US7 | As a creator, I want to see a history of all processed streams | P1 |
+### 3.7 Captions
+
+| Output | Format | Description |
+|--------|--------|-------------|
+| Long-form | SRT | Full transcript with timestamps |
+| Long-form | VTT | WebVTT for YouTube |
+| Short-form | SRT per clip | Individual caption file for each clip |
+
+### 3.8 Notifications (Telegram)
+
+| Event | Notification |
+|-------|--------------|
+| New files detected | "📁 New stream detected: {name}. Processing will begin shortly." |
+| Processing started | "🎬 Processing started: {name}" |
+| Processing complete | "✅ Complete: {name}\n📺 {chapters} chapters\n📱 {clips} clips\n📂 View outputs: {link}" |
+| Processing failed | "❌ Failed: {name}\n{error_message}" |
 
 ---
 
-## 4. System Architecture
+## 4. Output Specifications
 
-### 4.1 High-Level Architecture
+### 4.1 Google Drive Output Structure
+
+```
+📁 StreamAutomation/
+│
+├── 📁 Input/                              ← User uploads here
+│   └── 📁 2025-01-15_market_analysis/
+│       ├── 📄 full_stream.mp4
+│       ├── 📄 webcam.mp4
+│       └── 📄 screen.mp4
+│
+└── 📁 Output/                             ← Service creates this
+    └── 📁 2025-01-15_market_analysis/
+        │
+        ├── 📁 longform/
+        │   ├── 📄 timeline.xml            ← Import to Premiere
+        │   ├── 📄 captions.srt            ← Full subtitles
+        │   ├── 📄 captions.vtt            ← YouTube format
+        │   ├── 📄 chapters.txt            ← YouTube chapters
+        │   └── 📄 suggestions.md          ← Titles, thumbnails, tags
+        │
+        ├── 📁 shortform/
+        │   ├── 📄 timeline.xml            ← All clips in sequence
+        │   ├── 📄 clips_metadata.json     ← Full clip data
+        │   ├── 📁 captions/
+        │   │   ├── 📄 clip_001.srt
+        │   │   ├── 📄 clip_002.srt
+        │   │   └── ... (one per clip)
+        │   └── 📄 suggestions.md          ← Title per clip
+        │
+        └── 📁 transcript/
+            ├── 📄 full_transcript.json    ← Word-level timestamps
+            └── 📄 full_transcript.txt     ← Plain text
+```
+
+### 4.2 Long-Form suggestions.md Format
+
+```markdown
+# Long-Form Content Suggestions
+
+## Title Ideas
+1. "Why Bitcoin Will Hit $100K This Month (Here's The Data)"
+2. "Market Analysis: The Bull Run Everyone's Missing"
+3. "I Predicted This Crash - Here's What's Next"
+4. "[날짜] 비트코인 시장 분석 - 지금 사야 하는 이유"
+5. "This Chart Pattern Changes Everything"
+
+## Thumbnail Concepts
+1. Split frame: Surprised face + Bitcoin chart spiking up
+2. Bold text "$100K" with upward arrow, your face pointing
+3. Before/after chart comparison with shocked expression
+
+## YouTube Chapters
+00:00 Introduction
+02:34 Market Overview
+15:22 Bitcoin Analysis
+32:10 Altcoin Picks
+45:33 Q&A Session
+
+## Tags
+bitcoin, crypto, market analysis, trading, 비트코인, 암호화폐, cryptocurrency, BTC,
+technical analysis, price prediction, bull run, crypto news
+
+## Description Template
+🔥 In today's stream, we cover...
+
+📊 Chapters:
+[chapters auto-inserted]
+
+🔔 Subscribe for daily market analysis
+💬 Join the community: [links]
+
+#bitcoin #crypto #trading
+```
+
+### 4.3 Short-Form suggestions.md Format
+
+```markdown
+# Short-Form Clips
+
+## CLIP_001
+**Category:** bold_prediction
+**Duration:** 0:45
+**Viral Score:** 0.95
+
+**Hook:** "This is exactly why I said..."
+
+**Why it's clip-worthy:** Strong conviction call with supporting data
+
+**Title Ideas:**
+- "I Called It 📈"
+- "Bitcoin's Next Move (I Predicted This)"
+- "Nobody Believed Me..."
+
+---
+
+## CLIP_002
+**Category:** insight
+**Duration:** 1:12
+**Viral Score:** 0.89
+
+**Hook:** "What people don't realize about this chart..."
+
+**Why it's clip-worthy:** Unique perspective that contradicts popular opinion
+
+**Title Ideas:**
+- "The Chart Everyone's Reading Wrong"
+- "This Changes Everything"
+- "Why I'm Buying When Everyone's Selling"
+
+---
+[continues for all clips]
+```
+
+---
+
+## 5. System Architecture
+
+### 5.1 High-Level Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                              USER'S ENVIRONMENT                              │
+│                                                                              │
 │  ┌─────────────┐         ┌─────────────────────────────────────────────┐    │
 │  │  OBS Studio │ ──────► │              Google Drive                    │    │
-│  │  (Records)  │  sync   │  ┌─────────────────────────────────────┐    │    │
-│  └─────────────┘         │  │ 📁 StreamAutomation/                │    │    │
-│                          │  │   📁 Input/                         │    │    │
-│                          │  │     📁 2025-01-15_market_analysis/  │    │    │
-│                          │  │       📄 full_stream.mp4            │    │    │
-│                          │  │       📄 webcam.mp4                 │    │    │
-│                          │  │       📄 screen.mp4                 │    │    │
-│                          │  │   📁 Output/                        │    │    │
-│                          │  │     📁 2025-01-15_market_analysis/  │    │    │
-│                          │  │       📁 longform/                  │    │    │
-│                          │  │       📁 shortform/                 │    │    │
-│                          │  └─────────────────────────────────────┘    │    │
+│  │  (Records)  │  sync   │                                              │    │
+│  └─────────────┘         │  📁 StreamAutomation/Input/                  │    │
+│                          │    📁 2025-01-15_market_analysis/            │    │
+│                          │      📄 full_stream.mp4                      │    │
+│                          │      📄 webcam.mp4                           │    │
+│                          │      📄 screen.mp4                           │    │
 │                          └─────────────────────────────────────────────┘    │
+│                                                                              │
+│  ┌─────────────┐                                                            │
+│  │  Telegram   │◄─────────── Notifications                                  │
+│  │  App        │                                                            │
+│  └─────────────┘                                                            │
 └─────────────────────────────────────────────────────────────────────────────┘
                                           │
                                           │ Google Drive API
@@ -122,122 +375,151 @@ SO THAT I can focus on creating content while the tedious editing work happens a
 │  │   Web Frontend   │    │   API Backend    │    │  Background      │       │
 │  │   (Next.js)      │◄──►│   (FastAPI)      │◄──►│  Worker          │       │
 │  │                  │    │                  │    │  (Celery/Redis)  │       │
-│  │  • Dashboard     │    │  • Auth (OAuth)  │    │                  │       │
+│  │  • Dashboard     │    │  • Google OAuth  │    │                  │       │
 │  │  • Job status    │    │  • Job queue     │    │  • File watcher  │       │
-│  │  • Settings      │    │  • Google Drive  │    │  • Transcription │       │
-│  │  • History       │    │  • Webhooks      │    │  • Analysis      │       │
-│  └──────────────────┘    └──────────────────┘    │  • XML export    │       │
-│                                   │              │  • Upload        │       │
-│                                   │              └──────────────────┘       │
-│                                   ▼                        │                │
-│                          ┌──────────────────┐              │                │
-│                          │    Database      │              │                │
-│                          │   (PostgreSQL)   │◄─────────────┘                │
-│                          │                  │                               │
+│  │  • Settings      │    │  • Telegram bot  │    │  • Audio extract │       │
+│  │  • History       │    │  • Google Drive  │    │  • Silence detect│       │
+│  │  • Clip preview  │    │  • WebSocket     │    │  • Transcription │       │
+│  └──────────────────┘    └──────────────────┘    │  • Claude analysis│      │
+│                                   │              │  • XML generation│       │
+│                                   ▼              │  • Upload outputs│       │
+│                          ┌──────────────────┐    │  • Send Telegram │       │
+│                          │    Database      │    └──────────────────┘       │
+│                          │   (PostgreSQL)   │              │                │
+│                          │                  │◄─────────────┘                │
 │                          │  • Jobs          │                               │
 │                          │  • User settings │                               │
 │                          │  • History       │                               │
+│                          │  • Clip data     │                               │
 │                          └──────────────────┘                               │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
                                           │
-                                          │ API Calls
+                                          │ External APIs
                                           ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           EXTERNAL SERVICES                                  │
+│                                                                              │
 │  ┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐       │
-│  │  Return Zero     │    │  Claude API      │    │  Google Drive    │       │
-│  │  (Transcription) │    │  (Analysis)      │    │  (Storage)       │       │
-│  └──────────────────┘    └──────────────────┘    └──────────────────┘       │
+│  │  Return Zero     │    │  Claude API      │    │  Telegram Bot    │       │
+│  │  (Transcription) │    │  (Analysis)      │    │  API             │       │
+│  │                  │    │                  │    │                  │       │
+│  │  • Korean STT    │    │  • Chapters      │    │  • Notifications │       │
+│  │  • English STT   │    │  • Viral clips   │    │  • Status updates│       │
+│  │  • Timestamps    │    │  • Titles        │    │                  │       │
+│  └──────────────────┘    │  • Thumbnails    │    └──────────────────┘       │
+│                          └──────────────────┘                               │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 4.2 Processing Pipeline
+### 5.2 Processing Pipeline (Detailed)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           PROCESSING PIPELINE                                │
 └─────────────────────────────────────────────────────────────────────────────┘
 
- 1. DETECT                2. DOWNLOAD              3. PROCESS
-┌───────────────┐       ┌───────────────┐       ┌───────────────┐
-│ Watch Google  │       │ Download 3    │       │ • Extract     │
-│ Drive /Input  │──────►│ video files   │──────►│   audio       │
-│ folder        │       │ to temp       │       │ • Detect      │
-│               │       │ storage       │       │   silences    │
-└───────────────┘       └───────────────┘       │ • Transcribe  │
-                                                │ • Analyze     │
-                                                │ • Generate    │
-                                                │   XMLs        │
-                                                └───────┬───────┘
-                                                        │
- 4. UPLOAD               5. NOTIFY                      │
-┌───────────────┐       ┌───────────────┐              │
-│ Upload to     │       │ Send email/   │              │
-│ Google Drive  │◄──────│ push          │◄─────────────┘
-│ /Output       │       │ notification  │
-└───────────────┘       └───────────────┘
+Step 1: DETECT (File Watcher - runs every 60 seconds)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  • List folders in Google Drive /StreamAutomation/Input                     │
+│  • Check each folder for 3 required files (full_stream, webcam, screen)     │
+│  • Validate files are fully uploaded (size stable for 60s)                  │
+│  • Check folder not already processed                                        │
+│  • If ready → Create job → Send to queue → Notify Telegram                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                          │
+                                          ▼
+Step 2: DOWNLOAD
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  • Download all 3 video files from Google Drive                             │
+│  • Store in temporary cloud storage (GCS)                                   │
+│  • Validate file integrity                                                  │
+│  • Update job status: "Downloading..." (10%)                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                          │
+                                          ▼
+Step 3: AUDIO PROCESSING
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  • Extract audio from full_stream.mp4 using FFmpeg                          │
+│  • Output: 16kHz mono WAV for transcription                                 │
+│  • Detect silences using FFmpeg silencedetect                               │
+│  • Generate edit regions (content to keep)                                  │
+│  • Update job status: "Processing audio..." (20%)                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                          │
+                                          ▼
+Step 4: TRANSCRIPTION (Return Zero API)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  • Upload audio to Return Zero API                                          │
+│  • Poll for completion                                                      │
+│  • Receive transcript with word-level timestamps                            │
+│  • Detect language breakdown (Korean %, English %)                          │
+│  • Save: full_transcript.json, full_transcript.txt                          │
+│  • Update job status: "Transcribing..." (40%)                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                          │
+                                          ▼
+Step 5: LONG-FORM ANALYSIS (Claude API)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  • Send transcript to Claude                                                │
+│  • Prompt for chapter detection, title ideas, thumbnail concepts            │
+│  • Receive: chapters[], title_ideas[], thumbnail_concepts[], tags[]         │
+│  • Generate chapters.txt (YouTube format)                                   │
+│  • Generate suggestions.md                                                  │
+│  • Update job status: "Analyzing long-form..." (55%)                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                          │
+                                          ▼
+Step 6: SHORT-FORM ANALYSIS (Claude API)
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  • Send transcript to Claude with viral signals config                      │
+│  • Prompt for minimum 10 viral moments                                      │
+│  • Receive: clips[] with id, start, end, category, score, titles, hook     │
+│  • Sort by viral_score, ensure no overlaps                                  │
+│  • Generate clips_metadata.json                                             │
+│  • Generate suggestions.md (per clip)                                       │
+│  • Update job status: "Analyzing short-form..." (70%)                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                          │
+                                          ▼
+Step 7: PREMIERE XML GENERATION
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  • Generate long-form timeline.xml (FCP7 format)                            │
+│    - full_stream on V1/A1 with silence cuts                                 │
+│    - Chapter markers                                                         │
+│  • Generate short-form timeline.xml (FCP7 format)                           │
+│    - webcam on V1 (top 40%, scaled)                                         │
+│    - screen on V2 (bottom 60%, scaled)                                      │
+│    - Audio on A1                                                            │
+│    - Clip boundary markers                                                   │
+│  • Update job status: "Generating timelines..." (80%)                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                          │
+                                          ▼
+Step 8: CAPTION GENERATION
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  • Generate long-form captions.srt and captions.vtt                         │
+│  • Generate per-clip SRT files (clip_001.srt, clip_002.srt, ...)           │
+│  • Update job status: "Generating captions..." (85%)                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                          │
+                                          ▼
+Step 9: UPLOAD TO GOOGLE DRIVE
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  • Create output folder structure in /StreamAutomation/Output               │
+│  • Upload all generated files                                               │
+│  • Update job status: "Uploading..." (95%)                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                          │
+                                          ▼
+Step 10: COMPLETE & NOTIFY
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  • Update job status: "Completed" (100%)                                    │
+│  • Send Telegram notification with summary                                  │
+│  • Clean up temporary files                                                 │
+│  • Log processing metrics                                                   │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
-
----
-
-## 5. Google Drive Folder Structure
-
-### 5.1 Required Folder Structure
-
-```
-📁 StreamAutomation/
-│
-├── 📁 Input/
-│   │
-│   ├── 📁 2025-01-15_market_analysis/     ← User creates this folder
-│   │   ├── 📄 full_stream.mp4             ← Required
-│   │   ├── 📄 webcam.mp4                  ← Required
-│   │   └── 📄 screen.mp4                  ← Required
-│   │
-│   └── 📁 2025-01-16_crypto_update/       ← Another stream
-│       ├── 📄 full_stream.mp4
-│       ├── 📄 webcam.mp4
-│       └── 📄 screen.mp4
-│
-└── 📁 Output/                              ← Auto-created by service
-    │
-    ├── 📁 2025-01-15_market_analysis/
-    │   ├── 📁 longform/
-    │   │   ├── 📄 timeline.xml
-    │   │   ├── 📄 captions.srt
-    │   │   ├── 📄 captions.vtt
-    │   │   ├── 📄 chapters.txt
-    │   │   └── 📄 suggestions.md
-    │   │
-    │   ├── 📁 shortform/
-    │   │   ├── 📄 timeline.xml
-    │   │   ├── 📄 clips_metadata.json
-    │   │   ├── 📁 captions/
-    │   │   └── 📄 suggestions.md
-    │   │
-    │   └── 📁 transcript/
-    │       ├── 📄 full_transcript.json
-    │       └── 📄 full_transcript.txt
-    │
-    └── 📄 _processing_log.json            ← Processing history
-```
-
-### 5.2 File Detection Rules
-
-A folder in `/Input` is ready for processing when:
-1. Folder contains exactly 3 video files
-2. Files are named: `full_stream.*`, `webcam.*`, `screen.*` (mp4, mov, mkv)
-3. All files have finished uploading (file size stable for 60 seconds)
-4. Folder has not been processed before (not in history)
-
-### 5.3 Naming Convention
-
-**Input folder naming:** `{YYYY-MM-DD}_{stream_title}`
-- Example: `2025-01-15_market_analysis`
-- Example: `2025-01-16_bitcoin_crash_reaction`
-
-The folder name becomes the stream name in the system.
 
 ---
 
@@ -257,8 +539,8 @@ The folder name becomes the stream name in the system.
 │  ├─────────────────────────────────────────────────────────┤   │
 │  │                                                         │   │
 │  │  🔄 Processing: "2025-01-15 Market Analysis"            │   │
-│  │     Step 3/5: Transcribing... (45%)                     │   │
-│  │     ████████████░░░░░░░░░░░░░░                          │   │
+│  │     Step 4/10: Transcribing... (40%)                    │   │
+│  │     ████████████░░░░░░░░░░░░░░░░░░░░                    │   │
 │  │                                                         │   │
 │  │  ⏳ Queued: 1 stream                                    │   │
 │  │  ✅ Completed today: 2 streams                          │   │
@@ -271,22 +553,97 @@ The folder name becomes the stream name in the system.
 │  │                                                         │   │
 │  │  ┌─────────────────────────────────────────────────┐   │   │
 │  │  │ ✅ 2025-01-14 Crypto Weekly Review              │   │   │
-│  │  │    12 clips • 8 chapters • Completed 2h ago     │   │   │
-│  │  │    [View Output] [Re-process]                   │   │   │
+│  │  │    Duration: 1:32:45 → 1:18:22 (14m silences)   │   │   │
+│  │  │    📺 8 chapters • 📱 12 clips                   │   │   │
+│  │  │    [View Details] [Open in Drive] [Re-process]  │   │   │
 │  │  └─────────────────────────────────────────────────┘   │   │
 │  │                                                         │   │
 │  │  ┌─────────────────────────────────────────────────┐   │   │
 │  │  │ ✅ 2025-01-13 Bitcoin Analysis                  │   │   │
-│  │  │    15 clips • 10 chapters • Completed yesterday │   │   │
-│  │  │    [View Output] [Re-process]                   │   │   │
+│  │  │    Duration: 2:05:12 → 1:48:33 (17m silences)   │   │   │
+│  │  │    📺 10 chapters • 📱 15 clips                  │   │   │
+│  │  │    [View Details] [Open in Drive] [Re-process]  │   │   │
 │  │  └─────────────────────────────────────────────────┘   │   │
 │  │                                                         │   │
+│  │  [View All History]                                    │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-#### 6.1.2 Settings Page
+#### 6.1.2 Job Detail Page
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  ← 2025-01-15 Market Analysis                                   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Status: ✅ Completed                                           │
+│  Original: 1:32:45 → Final: 1:18:22 (14:23 silences removed)   │
+│  Languages: Korean 72% • English 28%                           │
+│  Processed: 2 hours ago                                         │
+│                                                                 │
+│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━   │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ 📺 LONG-FORM OUTPUT                         [Open in Drive] │
+│  ├─────────────────────────────────────────────────────────┤   │
+│  │                                                         │   │
+│  │  📄 Files:                                              │   │
+│  │     • timeline.xml (Premiere import)                    │   │
+│  │     • captions.srt / captions.vtt                       │   │
+│  │     • chapters.txt                                      │   │
+│  │     • suggestions.md                                    │   │
+│  │                                                         │   │
+│  │  📑 Chapters (8):                                       │   │
+│  │     00:00 Introduction                                  │   │
+│  │     02:34 Market Overview                               │   │
+│  │     15:22 Bitcoin Analysis                              │   │
+│  │     28:45 Ethereum Update                               │   │
+│  │     42:10 Altcoin Picks                                 │   │
+│  │     55:33 Risk Management                               │   │
+│  │     1:08:20 Q&A Session                                 │   │
+│  │     1:15:45 Closing Thoughts                            │   │
+│  │                                                         │   │
+│  │  💡 Title Ideas:                                        │   │
+│  │     1. "Why Bitcoin Will Hit $100K This Month"          │   │
+│  │     2. "The Bull Run Everyone's Missing"                │   │
+│  │     3. "I Predicted This - Here's What's Next"          │   │
+│  │                                                         │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ 📱 SHORT-FORM CLIPS (12)                    [Open in Drive] │
+│  ├─────────────────────────────────────────────────────────┤   │
+│  │                                                         │   │
+│  │  ┌───────────────────────────────────────────────────┐ │   │
+│  │  │ CLIP_001 • bold_prediction • ⭐ 0.95              │ │   │
+│  │  │ 0:45 duration • starts at 15:32                   │ │   │
+│  │  │                                                   │ │   │
+│  │  │ "This is exactly why I said Bitcoin would..."     │ │   │
+│  │  │                                                   │ │   │
+│  │  │ Titles: "I Called It 📈" / "Nobody Believed Me"   │ │   │
+│  │  └───────────────────────────────────────────────────┘ │   │
+│  │                                                         │   │
+│  │  ┌───────────────────────────────────────────────────┐ │   │
+│  │  │ CLIP_002 • insight • ⭐ 0.89                      │ │   │
+│  │  │ 1:12 duration • starts at 28:15                   │ │   │
+│  │  │                                                   │ │   │
+│  │  │ "What people don't realize about this chart..."   │ │   │
+│  │  │                                                   │ │   │
+│  │  │ Titles: "The Chart Everyone's Missing" / "..."    │ │   │
+│  │  └───────────────────────────────────────────────────┘ │   │
+│  │                                                         │   │
+│  │  [Show all 12 clips...]                                │   │
+│  │                                                         │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  [🔄 Re-process with different settings]                        │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### 6.1.3 Settings Page
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -294,7 +651,7 @@ The folder name becomes the stream name in the system.
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │ 🔗 Google Drive Connection                               │   │
+│  │ 🔗 GOOGLE DRIVE                                          │   │
 │  ├─────────────────────────────────────────────────────────┤   │
 │  │  Status: ✅ Connected as juhyuk@gmail.com               │   │
 │  │  Input folder: /StreamAutomation/Input                  │   │
@@ -303,17 +660,32 @@ The folder name becomes the stream name in the system.
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │ 🔊 Silence Detection                                     │   │
+│  │ 📱 TELEGRAM NOTIFICATIONS                                │   │
 │  ├─────────────────────────────────────────────────────────┤   │
-│  │  Threshold: [-40] dB                                    │   │
-│  │  Minimum duration: [0.5] seconds                        │   │
-│  │  Padding: [0.1] seconds                                 │   │
+│  │  Status: ✅ Connected                                   │   │
+│  │  Chat ID: 123456789                                     │   │
+│  │                                                         │   │
+│  │  Notify on:                                             │   │
+│  │  [x] New files detected                                 │   │
+│  │  [x] Processing started                                 │   │
+│  │  [x] Processing completed                               │   │
+│  │  [x] Processing failed                                  │   │
+│  │                                                         │   │
+│  │  [Send Test Message] [Reconnect]                        │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │ 🎬 Short-form Settings                                   │   │
+│  │ 🔊 SILENCE DETECTION                                     │   │
 │  ├─────────────────────────────────────────────────────────┤   │
-│  │  Minimum clips: [10]                                    │   │
+│  │  Threshold: [-40] dB        (lower = more aggressive)   │   │
+│  │  Min duration: [0.5] sec    (shorter silences kept)     │   │
+│  │  Padding: [0.1] sec         (buffer around speech)      │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ 🎬 SHORT-FORM CLIPS                                      │   │
+│  ├─────────────────────────────────────────────────────────┤   │
+│  │  Minimum clips per stream: [10]                         │   │
 │  │  Maximum clip duration: [180] seconds                   │   │
 │  │                                                         │   │
 │  │  Viral signals (what to look for):                      │   │
@@ -322,62 +694,19 @@ The folder name becomes the stream name in the system.
 │  │  [x] Price calls                                        │   │
 │  │  [x] "I told you so" moments                            │   │
 │  │  [x] Surprising insights                                │   │
-│  │  [ ] Custom: [________________]  [Add]                  │   │
+│  │  [x] Emotional reactions                                │   │
+│  │                                                         │   │
+│  │  Custom signal: [________________] [+ Add]              │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │ 🔔 Notifications                                         │   │
+│  │ 📺 LONG-FORM SETTINGS                                    │   │
 │  ├─────────────────────────────────────────────────────────┤   │
-│  │  [x] Email when processing completes                    │   │
-│  │  [ ] Email when new files detected                      │   │
-│  │  Email: juhyuk@gmail.com                                │   │
+│  │  Min chapter duration: [60] seconds                     │   │
+│  │  Max chapters: [20]                                     │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
 │                                          [Save Settings]        │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-#### 6.1.3 Job Detail Page
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  2025-01-15 Market Analysis                      [← Back]       │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  Status: ✅ Completed                                           │
-│  Duration: 1:32:45 → 1:18:22 (14 min silences removed)         │
-│  Processed: 2 hours ago                                         │
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │ 📺 Long-form Output                                      │   │
-│  ├─────────────────────────────────────────────────────────┤   │
-│  │  Chapters: 8                                            │   │
-│  │  00:00 Introduction                                     │   │
-│  │  02:34 Market Overview                                  │   │
-│  │  15:22 Bitcoin Analysis                                 │   │
-│  │  ...                                                    │   │
-│  │                                                         │   │
-│  │  [📥 Download timeline.xml] [📂 Open in Drive]          │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │ 📱 Short-form Clips (12)                                 │   │
-│  ├─────────────────────────────────────────────────────────┤   │
-│  │                                                         │   │
-│  │  Clip 1 • bold_prediction • Score: 0.95                 │   │
-│  │  "Bitcoin will hit $100K this month..."                 │   │
-│  │  Duration: 0:45                                         │   │
-│  │                                                         │   │
-│  │  Clip 2 • insight • Score: 0.89                         │   │
-│  │  "What people don't realize about..."                   │   │
-│  │  Duration: 1:12                                         │   │
-│  │  ...                                                    │   │
-│  │                                                         │   │
-│  │  [📥 Download all clips] [📂 Open in Drive]             │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  [🔄 Re-process Stream]                                         │
-│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -393,6 +722,7 @@ The folder name becomes the stream name in the system.
 | Styling | Tailwind CSS | Utility-first CSS |
 | UI Components | shadcn/ui | Accessible, customizable |
 | State | React Query | Server state management |
+| Real-time | Server-Sent Events | Live progress updates |
 | Auth | NextAuth.js | Google OAuth |
 
 ### 7.2 Backend
@@ -404,145 +734,56 @@ The folder name becomes the stream name in the system.
 | Message Broker | Redis | For Celery + caching |
 | Database | PostgreSQL | Job history, settings |
 | File Storage | Google Drive API | Primary storage |
-| Temp Storage | Cloud Storage (GCS) | Processing temp files |
+| Temp Storage | Google Cloud Storage | Processing temp files |
+| Telegram | python-telegram-bot | Notifications |
 
-### 7.3 External Services
+### 7.3 Processing (same as CLI version)
 
-| Service | Purpose | API |
-|---------|---------|-----|
-| Google Drive | File storage & sync | Drive API v3 |
-| Return Zero | Korean/English transcription | RTZR STT API |
-| Anthropic | Content analysis | Claude API |
-| SendGrid/Resend | Email notifications | Email API |
+| Component | Technology | Notes |
+|-----------|------------|-------|
+| Audio Extraction | FFmpeg | Via ffmpeg-python |
+| Silence Detection | FFmpeg | silencedetect filter |
+| Transcription | Return Zero API | Korean/English STT |
+| Analysis | Claude API (Sonnet) | Chapter + viral detection |
+| XML Generation | Python xml.etree | FCP7 format |
 
-### 7.4 Infrastructure
+### 7.4 External Services
 
-| Component | Service | Notes |
-|-----------|---------|-------|
-| Frontend Hosting | Vercel | Next.js optimized |
-| Backend Hosting | Google Cloud Run | Serverless containers |
-| Worker Hosting | Google Compute Engine | Long-running processes |
-| Database | Cloud SQL (PostgreSQL) | Managed database |
-| Redis | Cloud Memorystore | Managed Redis |
+| Service | Purpose | Monthly Cost (Est.) |
+|---------|---------|---------------------|
+| Return Zero | Transcription | ~$20-30 |
+| Anthropic Claude | Analysis | ~$10-20 |
+| Telegram Bot | Notifications | Free |
+| Google Drive | Storage | User's own quota |
+| **Total API Costs** | | **~$30-50** |
 
----
+### 7.5 Infrastructure
 
-## 8. API Specification
+| Component | Service | Monthly Cost (Est.) |
+|-----------|---------|---------------------|
+| Frontend | Vercel (Hobby) | Free |
+| Backend API | Google Cloud Run | ~$10-20 |
+| Worker | Google Cloud Run | ~$10-20 |
+| Database | Cloud SQL (Basic) | ~$10 |
+| Redis | Cloud Memorystore (Basic) | ~$10 |
+| Temp Storage | Cloud Storage | ~$5 |
+| **Total Infrastructure** | | **~$45-65** |
 
-### 8.1 Endpoints
-
-#### Authentication
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/auth/google` | Initiate Google OAuth |
-| GET | `/api/auth/callback` | OAuth callback |
-| POST | `/api/auth/logout` | Logout |
-| GET | `/api/auth/me` | Get current user |
-
-#### Jobs
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/jobs` | List all jobs |
-| GET | `/api/jobs/{id}` | Get job details |
-| POST | `/api/jobs/{id}/reprocess` | Re-process a job |
-| DELETE | `/api/jobs/{id}` | Delete job and outputs |
-
-#### Settings
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/settings` | Get user settings |
-| PUT | `/api/settings` | Update settings |
-| POST | `/api/settings/test-drive` | Test Drive connection |
-
-#### Status
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/status` | Get current processing status |
-| GET | `/api/status/stream` | SSE stream for real-time updates |
-
-### 8.2 WebSocket/SSE Events
-
-Real-time updates via Server-Sent Events:
-
-```typescript
-interface ProcessingEvent {
-  type: 'job_started' | 'job_progress' | 'job_completed' | 'job_failed';
-  jobId: string;
-  data: {
-    step?: string;       // Current step name
-    progress?: number;   // 0-100
-    message?: string;    // Status message
-    error?: string;      // Error message if failed
-  };
-}
-```
+### 7.6 Total Monthly Cost: **~$75-100**
 
 ---
 
-## 9. Background Worker Specification
-
-### 9.1 File Watcher Task
-
-Runs every 60 seconds:
-
-```python
-@celery.task
-def watch_google_drive():
-    """
-    1. List folders in /StreamAutomation/Input
-    2. For each folder:
-       - Check if it has 3 required files
-       - Check if files are fully uploaded (size stable)
-       - Check if not already processed
-    3. If ready, create job and enqueue processing task
-    """
-```
-
-### 9.2 Processing Task
-
-```python
-@celery.task(bind=True, max_retries=3)
-def process_stream(self, job_id: str):
-    """
-    1. Download files from Google Drive to temp storage
-    2. Extract audio
-    3. Detect silences
-    4. Transcribe (Return Zero API)
-    5. Analyze (Claude API)
-    6. Generate Premiere XMLs
-    7. Upload outputs to Google Drive
-    8. Update job status
-    9. Send notification
-    10. Cleanup temp files
-    """
-```
-
-### 9.3 Job States
-
-```
-PENDING → DOWNLOADING → PROCESSING → UPLOADING → COMPLETED
-                ↓           ↓            ↓
-              FAILED      FAILED       FAILED
-```
-
----
-
-## 10. Database Schema
-
-### 10.1 Tables
+## 8. Database Schema
 
 ```sql
 -- Users table
 CREATE TABLE users (
-    id UUID PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email VARCHAR(255) UNIQUE NOT NULL,
     google_id VARCHAR(255) UNIQUE NOT NULL,
     google_access_token TEXT,
     google_refresh_token TEXT,
+    telegram_chat_id VARCHAR(50),
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -550,40 +791,74 @@ CREATE TABLE users (
 -- User settings
 CREATE TABLE settings (
     user_id UUID PRIMARY KEY REFERENCES users(id),
+
+    -- Google Drive
+    input_folder_id VARCHAR(255),
+    output_folder_id VARCHAR(255),
+
+    -- Silence detection
     silence_threshold_db FLOAT DEFAULT -40,
     silence_min_duration FLOAT DEFAULT 0.5,
     silence_padding FLOAT DEFAULT 0.1,
+
+    -- Short-form
     min_clips INTEGER DEFAULT 10,
     max_clip_duration INTEGER DEFAULT 180,
-    viral_signals JSONB DEFAULT '[]',
-    email_on_complete BOOLEAN DEFAULT true,
-    input_folder_id VARCHAR(255),
-    output_folder_id VARCHAR(255),
+    viral_signals JSONB DEFAULT '["bold market predictions", "contrarian takes", "price calls", "I told you so moments", "surprising insights", "emotional reactions"]',
+
+    -- Long-form
+    min_chapter_duration INTEGER DEFAULT 60,
+    max_chapters INTEGER DEFAULT 20,
+
+    -- Notifications
+    notify_on_detected BOOLEAN DEFAULT true,
+    notify_on_started BOOLEAN DEFAULT true,
+    notify_on_completed BOOLEAN DEFAULT true,
+    notify_on_failed BOOLEAN DEFAULT true,
+
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
 -- Processing jobs
 CREATE TABLE jobs (
-    id UUID PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES users(id),
     stream_name VARCHAR(255) NOT NULL,
+
+    -- Status
     status VARCHAR(50) NOT NULL DEFAULT 'pending',
+    -- pending, downloading, processing, transcribing, analyzing_longform,
+    -- analyzing_shortform, generating, uploading, completed, failed
     current_step VARCHAR(100),
     progress INTEGER DEFAULT 0,
     error_message TEXT,
 
-    -- Input files
+    -- Input files (Google Drive IDs)
     input_folder_id VARCHAR(255),
     full_stream_file_id VARCHAR(255),
     webcam_file_id VARCHAR(255),
     screen_file_id VARCHAR(255),
 
-    -- Output info
-    output_folder_id VARCHAR(255),
-    chapters_count INTEGER,
-    clips_count INTEGER,
+    -- Duration info
     original_duration FLOAT,
     final_duration FLOAT,
+    silence_removed FLOAT,
+
+    -- Output info
+    output_folder_id VARCHAR(255),
+
+    -- Long-form results
+    chapters_count INTEGER,
+    title_ideas JSONB,
+    thumbnail_concepts JSONB,
+
+    -- Short-form results
+    clips_count INTEGER,
+    clips_data JSONB,  -- Full clip metadata
+
+    -- Transcript info
+    word_count INTEGER,
+    language_breakdown JSONB,  -- {"ko": 72.5, "en": 27.5}
 
     -- Timestamps
     created_at TIMESTAMP DEFAULT NOW(),
@@ -591,11 +866,12 @@ CREATE TABLE jobs (
     completed_at TIMESTAMP
 );
 
--- Processing history/logs
+-- Job logs for debugging
 CREATE TABLE job_logs (
-    id UUID PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     job_id UUID REFERENCES jobs(id),
     level VARCHAR(20),  -- info, warning, error
+    step VARCHAR(100),
     message TEXT,
     created_at TIMESTAMP DEFAULT NOW()
 );
@@ -603,152 +879,215 @@ CREATE TABLE job_logs (
 
 ---
 
-## 11. Security Considerations
+## 9. API Endpoints
 
-### 11.1 Authentication
+### 9.1 Authentication
 
-- Google OAuth 2.0 for user authentication
-- JWT tokens for API authentication
-- Refresh token rotation
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/auth/google` | Initiate Google OAuth |
+| GET | `/api/auth/google/callback` | OAuth callback |
+| POST | `/api/auth/logout` | Logout |
+| GET | `/api/auth/me` | Get current user |
 
-### 11.2 Authorization
+### 9.2 Telegram
 
-- Users can only access their own jobs and settings
-- Google Drive access scoped to specific folders
-- API rate limiting per user
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/telegram/connect` | Get bot link for connection |
+| POST | `/api/telegram/verify` | Verify connection with code |
+| POST | `/api/telegram/test` | Send test notification |
+| DELETE | `/api/telegram/disconnect` | Disconnect Telegram |
 
-### 11.3 Data Privacy
+### 9.3 Jobs
 
-- Video files processed in temp storage, deleted after completion
-- Transcripts stored only in user's Google Drive
-- No video content stored on service servers long-term
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/jobs` | List all jobs (paginated) |
+| GET | `/api/jobs/current` | Get currently processing job |
+| GET | `/api/jobs/{id}` | Get job details |
+| POST | `/api/jobs/{id}/reprocess` | Re-process a job |
+| DELETE | `/api/jobs/{id}` | Delete job and outputs |
 
-### 11.4 API Keys
+### 9.4 Settings
 
-- Return Zero and Anthropic API keys stored securely (env vars / secret manager)
-- User's Google tokens encrypted at rest
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/settings` | Get user settings |
+| PUT | `/api/settings` | Update settings |
+| POST | `/api/settings/test-drive` | Test Drive connection |
+
+### 9.5 Real-time Updates
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/events` | SSE stream for real-time updates |
+
+```typescript
+// Event types
+interface JobEvent {
+  type: 'job_detected' | 'job_started' | 'job_progress' | 'job_completed' | 'job_failed';
+  jobId: string;
+  data: {
+    streamName?: string;
+    step?: string;
+    progress?: number;
+    message?: string;
+    error?: string;
+    chaptersCount?: number;
+    clipsCount?: number;
+  };
+}
+```
 
 ---
 
-## 12. Deployment Architecture
+## 10. Telegram Bot Setup
+
+### 10.1 Bot Commands
+
+| Command | Description |
+|---------|-------------|
+| `/start` | Start bot, get connection code |
+| `/status` | Get current processing status |
+| `/history` | List recent processed streams |
+| `/help` | Show available commands |
+
+### 10.2 Notification Messages
+
+**New files detected:**
+```
+📁 New stream detected!
+
+Stream: 2025-01-15 Market Analysis
+Files: 3 videos found
+Status: Queued for processing
+
+Processing will begin shortly.
+```
+
+**Processing started:**
+```
+🎬 Processing started
+
+Stream: 2025-01-15 Market Analysis
+Started: Just now
+
+You'll be notified when complete.
+```
+
+**Processing complete:**
+```
+✅ Processing complete!
+
+Stream: 2025-01-15 Market Analysis
+Duration: 1:32:45 → 1:18:22
+Silences removed: 14:23
+
+📺 Long-form:
+• 8 chapters detected
+• 5 title ideas generated
+
+📱 Short-form:
+• 12 viral clips found
+• Total clip duration: 8:45
+
+📂 View outputs:
+drive.google.com/...
+
+🔗 Open dashboard:
+streamauto.app/jobs/abc123
+```
+
+**Processing failed:**
+```
+❌ Processing failed
+
+Stream: 2025-01-15 Market Analysis
+Error: Transcription service timeout
+
+Please try re-processing or contact support.
+
+🔗 View details:
+streamauto.app/jobs/abc123
+```
+
+---
+
+## 11. Deployment
+
+### 11.1 Architecture Diagram
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         VERCEL                                   │
 │  ┌─────────────────────────────────────────────────────────┐    │
 │  │                   Next.js Frontend                       │    │
-│  │              (Static + Server Components)                │    │
+│  │              streamauto.app                              │    │
 │  └─────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────┘
-                              │
                               │ HTTPS
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    GOOGLE CLOUD                                  │
+│                    GOOGLE CLOUD PLATFORM                         │
 │                                                                  │
-│  ┌─────────────────┐    ┌─────────────────┐                     │
-│  │   Cloud Run     │    │   Cloud Run     │                     │
-│  │   (API)         │◄──►│   (Worker)      │                     │
-│  └────────┬────────┘    └────────┬────────┘                     │
-│           │                      │                               │
-│           ▼                      ▼                               │
-│  ┌─────────────────────────────────────────┐                    │
-│  │           Cloud Memorystore              │                    │
-│  │              (Redis)                     │                    │
-│  └─────────────────────────────────────────┘                    │
-│                      │                                           │
-│                      ▼                                           │
-│  ┌─────────────────────────────────────────┐                    │
-│  │              Cloud SQL                   │                    │
-│  │            (PostgreSQL)                  │                    │
-│  └─────────────────────────────────────────┘                    │
-│                                                                  │
-│  ┌─────────────────────────────────────────┐                    │
-│  │           Cloud Storage                  │                    │
-│  │         (Temp file storage)              │                    │
-│  └─────────────────────────────────────────┘                    │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │                    Cloud Run                             │    │
+│  │  ┌─────────────────┐    ┌─────────────────┐             │    │
+│  │  │   API Service   │    │ Worker Service  │             │    │
+│  │  │   (FastAPI)     │    │   (Celery)      │             │    │
+│  │  │   api.streamauto│    │                 │             │    │
+│  │  └────────┬────────┘    └────────┬────────┘             │    │
+│  │           │                      │                       │    │
+│  └───────────┼──────────────────────┼───────────────────────┘    │
+│              │                      │                            │
+│  ┌───────────▼──────────────────────▼───────────────────────┐    │
+│  │                  Cloud Memorystore                        │    │
+│  │                      (Redis)                              │    │
+│  └───────────────────────────────────────────────────────────┘    │
+│                              │                                    │
+│  ┌───────────────────────────▼───────────────────────────────┐    │
+│  │                      Cloud SQL                             │    │
+│  │                   (PostgreSQL)                             │    │
+│  └───────────────────────────────────────────────────────────┘    │
+│                                                                   │
+│  ┌───────────────────────────────────────────────────────────┐    │
+│  │                   Cloud Storage                            │    │
+│  │              (Temporary file storage)                      │    │
+│  └───────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 13. Workflow Example
-
-### 13.1 End-to-End Flow
-
-1. **User finishes streaming**
-   - OBS saves 3 files to local folder
-   - Google Drive desktop app syncs to cloud
-
-2. **User organizes files**
-   - Creates folder `2025-01-15_market_analysis` in `/StreamAutomation/Input`
-   - Moves/copies the 3 video files into it
-
-3. **Service detects new files** (within 60 seconds)
-   - File watcher sees new folder with 3 videos
-   - Validates files are fully uploaded
-   - Creates job, sends to queue
-
-4. **Processing begins**
-   - Downloads files to temp storage
-   - Web dashboard shows "Processing..."
-   - Each step updates progress in real-time
-
-5. **Processing completes** (10-30 minutes depending on length)
-   - Outputs uploaded to `/StreamAutomation/Output/2025-01-15_market_analysis/`
-   - Email notification sent
-   - Dashboard shows completion with stats
-
-6. **User imports to Premiere**
-   - Downloads `timeline.xml` from Google Drive
-   - File > Import in Premiere
-   - Makes final adjustments and exports
-
----
-
-## 14. Future Enhancements (v3.0+)
-
-| Feature | Priority | Notes |
-|---------|----------|-------|
-| Dropbox/OneDrive support | Medium | Alternative cloud storage |
-| Direct Premiere plugin | Medium | Skip XML import |
-| Thumbnail generation | Medium | AI-generated thumbnails |
-| Auto-upload to YouTube | Low | Draft upload for review |
-| Team/multi-user support | Low | Collaboration features |
-| Mobile app | Low | iOS/Android companion |
-| Webhook integrations | Low | Zapier, IFTTT, etc. |
-
----
-
-## 15. Success Metrics
+## 12. Success Metrics
 
 | Metric | Target | Measurement |
 |--------|--------|-------------|
-| Detection latency | < 2 minutes | Time from upload complete to job start |
-| Processing time | < 15 min/hour of video | Total processing duration |
-| Uptime | 99.9% | Service availability |
-| Error rate | < 1% | Failed jobs / total jobs |
-| User satisfaction | Zero manual intervention | Fully automated workflow |
+| Detection latency | < 2 minutes | Time from upload to job start |
+| Processing speed | < 15 min per hour of video | End-to-end processing time |
+| Transcription accuracy | > 95% Korean, > 98% English | Manual sampling |
+| Viral clip quality | > 90% relevant | User feedback |
+| Clip count | ≥ 10 per stream | Automatic count |
+| Uptime | 99.9% | Monitoring |
+| User satisfaction | Zero manual intervention | Fully automated |
 
 ---
 
-## 16. Open Questions
+## 13. Open Questions Resolved
 
-1. **Hosting budget** - What's the acceptable monthly cost for cloud services?
-
-2. **Notification preferences** - Email only, or also Discord/Slack/Telegram?
-
-3. **Re-processing** - Should users be able to adjust settings and re-process? (Current answer: Yes)
-
-4. **Storage retention** - How long to keep outputs in Google Drive? (User manages their own Drive)
-
-5. **Multi-language expansion** - Any plans for languages beyond Korean/English?
+| Question | Answer |
+|----------|--------|
+| Budget | $100/month maximum |
+| Notifications | Telegram only |
+| Re-processing | Yes, with ability to change settings |
+| Storage retention | User manages their own Google Drive |
+| Languages | Korean and English only |
 
 ---
 
 ## Appendix A: Google Drive API Scopes
 
-Required OAuth scopes:
 ```
 https://www.googleapis.com/auth/drive.file
 https://www.googleapis.com/auth/drive.metadata.readonly
@@ -758,40 +1097,28 @@ https://www.googleapis.com/auth/userinfo.profile
 
 ---
 
-## Appendix B: File Detection Algorithm
+## Appendix B: Environment Variables
 
-```python
-def is_folder_ready_for_processing(folder) -> bool:
-    """
-    Check if a folder is ready for processing.
-    """
-    # 1. Check required files exist
-    files = list_files_in_folder(folder.id)
-    file_names = {f.name.lower() for f in files}
+```bash
+# Google OAuth
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
 
-    required_patterns = ['full_stream', 'webcam', 'screen']
-    video_extensions = ['.mp4', '.mov', '.mkv']
+# Database
+DATABASE_URL=postgresql://...
 
-    found_files = {}
-    for pattern in required_patterns:
-        for f in files:
-            name_lower = f.name.lower()
-            if pattern in name_lower:
-                if any(name_lower.endswith(ext) for ext in video_extensions):
-                    found_files[pattern] = f
-                    break
+# Redis
+REDIS_URL=redis://...
 
-    if len(found_files) != 3:
-        return False
+# External APIs
+RTZR_CLIENT_ID=
+RTZR_CLIENT_SECRET=
+ANTHROPIC_API_KEY=
 
-    # 2. Check files are fully uploaded (size stable for 60s)
-    for f in found_files.values():
-        if not is_file_upload_complete(f):
-            return False
+# Telegram
+TELEGRAM_BOT_TOKEN=
 
-    # 3. Check not already processed
-    if is_folder_in_history(folder.id):
-        return False
-
-    return True
+# App
+NEXT_PUBLIC_API_URL=https://api.streamauto.app
+SECRET_KEY=
 ```
