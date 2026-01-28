@@ -2,11 +2,14 @@
 
 import logging
 import shutil
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from celery import shared_task
 from google.oauth2.credentials import Credentials
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..models.job import JobStatus
@@ -20,6 +23,54 @@ from ..services.telegram import TelegramService
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+# Create sync engine for Celery tasks
+_sync_database_url = settings.database_url.replace("+asyncpg", "+psycopg2")
+_sync_engine = create_engine(_sync_database_url)
+
+
+def _update_job_status(
+    job_id: str,
+    status: str,
+    progress: int = 0,
+    current_step: Optional[str] = None,
+    error_message: Optional[str] = None,
+    **kwargs,
+):
+    """Update job status in database.
+
+    Args:
+        job_id: Job ID
+        status: New status
+        progress: Progress percentage
+        current_step: Current step description
+        error_message: Error message if failed
+        **kwargs: Additional fields to update
+    """
+    from ..db.models import Job
+
+    with Session(_sync_engine) as session:
+        job = session.query(Job).filter(Job.id == job_id).first()
+        if job:
+            job.status = status
+            job.progress = progress
+            job.current_step = current_step
+            if error_message:
+                job.error_message = error_message
+
+            # Update additional fields
+            for key, value in kwargs.items():
+                if hasattr(job, key):
+                    setattr(job, key, value)
+
+            # Update timestamps
+            if status == JobStatus.DOWNLOADING.value and not job.started_at:
+                job.started_at = datetime.utcnow()
+            if status in [JobStatus.COMPLETED.value, JobStatus.FAILED.value]:
+                job.completed_at = datetime.utcnow()
+
+            session.commit()
+            logger.debug(f"[{job_id}] Updated status: {status} ({progress}%)")
+
 
 @shared_task(bind=True, max_retries=3)
 def process_stream(
@@ -32,6 +83,7 @@ def process_stream(
     telegram_chat_id: Optional[str] = None,
     webcam_file_id: Optional[str] = None,
     screen_file_id: Optional[str] = None,
+    user_id: Optional[str] = None,
 ) -> dict:
     """Process a stream: download, transcribe, analyze, generate outputs.
 
@@ -44,6 +96,7 @@ def process_stream(
         telegram_chat_id: Optional Telegram chat ID for notifications
         webcam_file_id: Optional webcam file ID
         screen_file_id: Optional screen file ID
+        user_id: User ID for database records
 
     Returns:
         Dict with job results
@@ -95,20 +148,29 @@ def process_stream(
 
         # Step 1: Download (15%)
         logger.info(f"[{job_id}] Downloading stream file...")
-        result["status"] = JobStatus.DOWNLOADING.value
-        result["progress"] = 5
+        _update_job_status(
+            job_id,
+            JobStatus.DOWNLOADING.value,
+            progress=5,
+            current_step="Downloading from Google Drive",
+        )
 
         video_path = temp_dir / "stream.mp4"
         drive_service.download_file(stream_file_id, video_path)
-        result["progress"] = 15
+
+        _update_job_status(job_id, JobStatus.DOWNLOADING.value, progress=15)
 
         # Step 2: Audio Processing (30%)
         logger.info(f"[{job_id}] Processing audio...")
-        result["status"] = JobStatus.PROCESSING_AUDIO.value
+        _update_job_status(
+            job_id,
+            JobStatus.PROCESSING_AUDIO.value,
+            progress=20,
+            current_step="Extracting and analyzing audio",
+        )
 
         audio_path = temp_dir / "audio.wav"
         audio_processor.extract_audio(video_path, audio_path)
-        result["progress"] = 20
 
         # Get duration
         duration = audio_processor.get_duration(video_path)
@@ -123,20 +185,45 @@ def process_stream(
 
         result["final_duration"] = final_duration
         result["silence_removed"] = silence_removed
-        result["progress"] = 30
+
+        _update_job_status(
+            job_id,
+            JobStatus.PROCESSING_AUDIO.value,
+            progress=30,
+            original_duration=duration,
+            final_duration=final_duration,
+            silence_removed=silence_removed,
+        )
 
         # Step 3: Transcription (50%)
         logger.info(f"[{job_id}] Transcribing...")
-        result["status"] = JobStatus.TRANSCRIBING.value
+        _update_job_status(
+            job_id,
+            JobStatus.TRANSCRIBING.value,
+            progress=35,
+            current_step="Transcribing audio (Return Zero)",
+        )
 
         transcript = transcription_service.transcribe(audio_path)
         result["word_count"] = transcript.word_count
         result["language_breakdown"] = transcript.language_breakdown
-        result["progress"] = 50
+
+        _update_job_status(
+            job_id,
+            JobStatus.TRANSCRIBING.value,
+            progress=50,
+            word_count=transcript.word_count,
+            language_breakdown=transcript.language_breakdown,
+        )
 
         # Step 4: Analysis (70%)
         logger.info(f"[{job_id}] Analyzing content...")
-        result["status"] = JobStatus.ANALYZING.value
+        _update_job_status(
+            job_id,
+            JobStatus.ANALYZING.value,
+            progress=55,
+            current_step="Analyzing content (Claude AI)",
+        )
 
         analysis = analysis_service.analyze(
             transcript,
@@ -149,11 +236,26 @@ def process_stream(
         result["title_ideas"] = [t.model_dump() for t in analysis.title_ideas]
         result["thumbnail_concepts"] = [t.model_dump() for t in analysis.thumbnail_concepts]
         result["tags"] = analysis.tags
-        result["progress"] = 70
+
+        _update_job_status(
+            job_id,
+            JobStatus.ANALYZING.value,
+            progress=70,
+            chapters_count=len(analysis.chapters),
+            chapters_data=[ch.model_dump() for ch in analysis.chapters],
+            title_ideas=[t.model_dump() for t in analysis.title_ideas],
+            thumbnail_concepts=[t.model_dump() for t in analysis.thumbnail_concepts],
+            tags=analysis.tags,
+        )
 
         # Step 5: Generate Outputs (85%)
         logger.info(f"[{job_id}] Generating outputs...")
-        result["status"] = JobStatus.GENERATING.value
+        _update_job_status(
+            job_id,
+            JobStatus.GENERATING.value,
+            progress=75,
+            current_step="Generating timeline and captions",
+        )
 
         output_dir = temp_dir / "output"
         output_dir.mkdir(exist_ok=True)
@@ -200,11 +302,16 @@ def process_stream(
             encoding="utf-8",
         )
 
-        result["progress"] = 85
+        _update_job_status(job_id, JobStatus.GENERATING.value, progress=85)
 
         # Step 6: Upload to Google Drive (100%)
         logger.info(f"[{job_id}] Uploading outputs to Google Drive...")
-        result["status"] = JobStatus.UPLOADING.value
+        _update_job_status(
+            job_id,
+            JobStatus.UPLOADING.value,
+            progress=90,
+            current_step="Uploading to Google Drive",
+        )
 
         # Create output folder in Google Drive
         output_folder_id = drive_service.create_folder("output", folder_id)
@@ -217,6 +324,14 @@ def process_stream(
 
         result["progress"] = 100
         result["status"] = JobStatus.COMPLETED.value
+
+        _update_job_status(
+            job_id,
+            JobStatus.COMPLETED.value,
+            progress=100,
+            current_step="Complete",
+            output_folder_id=output_folder_id,
+        )
 
         # Send completion notification
         if telegram_chat_id:
@@ -240,6 +355,13 @@ def process_stream(
         logger.exception(f"[{job_id}] Processing failed: {e}")
         result["status"] = JobStatus.FAILED.value
         result["error_message"] = str(e)
+
+        _update_job_status(
+            job_id,
+            JobStatus.FAILED.value,
+            progress=result.get("progress", 0),
+            error_message=str(e),
+        )
 
         # Send failure notification
         if telegram_chat_id:

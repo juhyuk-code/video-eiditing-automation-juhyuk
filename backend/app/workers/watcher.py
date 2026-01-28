@@ -1,6 +1,7 @@
 """File watcher Celery task for detecting new streams."""
 
 import logging
+import uuid
 from typing import Optional
 
 from celery import shared_task
@@ -8,13 +9,11 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
+from ..models.job import JobStatus
 from .processor import process_stream
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
-
-# In-memory cache of processed folders (in production, use database)
-_processed_folders: set[str] = set()
 
 # Create sync engine for Celery tasks (Celery doesn't support async)
 _sync_database_url = settings.database_url.replace("+asyncpg", "+psycopg2")
@@ -43,7 +42,7 @@ def _get_users_with_watch_folders() -> list[dict]:
 
         for user, user_settings in result:
             users_data.append({
-                "user_id": user.id,
+                "user_id": str(user.id),
                 "email": user.email,
                 "watch_folder_id": user_settings.watch_folder_id,
                 "telegram_chat_id": user.telegram_chat_id,
@@ -54,6 +53,69 @@ def _get_users_with_watch_folders() -> list[dict]:
             })
 
     return users_data
+
+
+def _is_folder_already_processed(user_id: str, folder_id: str) -> bool:
+    """Check if a folder has already been processed or is being processed.
+
+    Args:
+        user_id: User ID
+        folder_id: Google Drive folder ID
+
+    Returns:
+        True if folder is already in the jobs table
+    """
+    from ..db.models import Job
+
+    with Session(_sync_engine) as session:
+        result = session.execute(
+            select(Job)
+            .where(Job.user_id == user_id)
+            .where(Job.folder_id == folder_id)
+        )
+        return result.scalar_one_or_none() is not None
+
+
+def _create_job_record(
+    job_id: str,
+    user_id: str,
+    stream_name: str,
+    stream_date: str,
+    folder_id: str,
+    stream_file_id: str,
+    webcam_file_id: Optional[str] = None,
+    screen_file_id: Optional[str] = None,
+) -> None:
+    """Create a new job record in the database.
+
+    Args:
+        job_id: Unique job ID
+        user_id: User ID
+        stream_name: Stream name
+        stream_date: Stream date (YYYYMMDD)
+        folder_id: Google Drive folder ID
+        stream_file_id: Stream file ID
+        webcam_file_id: Optional webcam file ID
+        screen_file_id: Optional screen file ID
+    """
+    from ..db.models import Job
+
+    with Session(_sync_engine) as session:
+        job = Job(
+            id=job_id,
+            user_id=user_id,
+            stream_name=stream_name,
+            stream_date=stream_date,
+            folder_id=folder_id,
+            stream_file_id=stream_file_id,
+            webcam_file_id=webcam_file_id,
+            screen_file_id=screen_file_id,
+            status=JobStatus.PENDING.value,
+            progress=0,
+        )
+        session.add(job)
+        session.commit()
+        logger.info(f"Created job record: {job_id}")
 
 
 @shared_task
@@ -156,14 +218,14 @@ def _watch_folder(
             folder_id = folder["id"]
             folder_name = folder["name"]
 
-            # Skip if already has output folder
+            # Skip if already has output folder (processing completed)
             if folder["has_output"]:
-                logger.debug(f"Skipping {folder_name}: already processed")
+                logger.debug(f"Skipping {folder_name}: already has output folder")
                 continue
 
-            # Skip if we've already queued it
-            if folder_id in _processed_folders:
-                logger.debug(f"Skipping {folder_name}: already in queue")
+            # Skip if we already have a job for this folder in the database
+            if user_id and _is_folder_already_processed(user_id, folder_id):
+                logger.debug(f"Skipping {folder_name}: already in database")
                 continue
 
             # Check for stream file
@@ -179,7 +241,22 @@ def _watch_folder(
 
             # New stream detected!
             logger.info(f"New stream detected: {folder_name}")
-            _processed_folders.add(folder_id)
+
+            # Generate job ID
+            job_id = str(uuid.uuid4())
+
+            # Create job record in database FIRST (prevents duplicate processing)
+            if user_id:
+                _create_job_record(
+                    job_id=job_id,
+                    user_id=user_id,
+                    stream_name=folder_name,
+                    stream_date=folder_name,
+                    folder_id=folder_id,
+                    stream_file_id=files["stream"]["id"],
+                    webcam_file_id=files["webcam"]["id"] if files["webcam"] else None,
+                    screen_file_id=files["screen"]["id"] if files["screen"] else None,
+                )
 
             # Notify via Telegram
             if telegram_chat_id:
@@ -189,9 +266,6 @@ def _watch_folder(
                 )
 
             # Queue processing task
-            import uuid
-            job_id = str(uuid.uuid4())
-
             process_stream.delay(
                 job_id=job_id,
                 stream_date=folder_name,
@@ -201,6 +275,7 @@ def _watch_folder(
                 telegram_chat_id=telegram_chat_id,
                 webcam_file_id=files["webcam"]["id"] if files["webcam"] else None,
                 screen_file_id=files["screen"]["id"] if files["screen"] else None,
+                user_id=user_id,
             )
 
             new_streams.append({
@@ -218,12 +293,3 @@ def _watch_folder(
     except Exception as e:
         logger.exception(f"Watcher failed: {e}")
         return {"status": "error", "error": str(e)}
-
-
-def clear_processed_cache():
-    """Clear the in-memory processed folders cache.
-
-    Useful for testing or allowing re-processing.
-    """
-    global _processed_folders
-    _processed_folders = set()
