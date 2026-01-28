@@ -17,9 +17,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install runtime dependencies (FFmpeg)
+# Install runtime dependencies (FFmpeg + PostgreSQL client libs for psycopg2)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    libpq5 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed packages from builder
