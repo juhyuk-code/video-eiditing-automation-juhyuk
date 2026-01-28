@@ -85,7 +85,7 @@ def _create_job_record(
     stream_file_id: str,
     webcam_file_id: Optional[str] = None,
     screen_file_id: Optional[str] = None,
-) -> None:
+) -> bool:
     """Create a new job record in the database.
 
     Args:
@@ -97,25 +97,35 @@ def _create_job_record(
         stream_file_id: Stream file ID
         webcam_file_id: Optional webcam file ID
         screen_file_id: Optional screen file ID
+
+    Returns:
+        True if job was created, False if duplicate (already exists)
     """
     from ..db.models import Job
+    from sqlalchemy.exc import IntegrityError
 
-    with Session(_sync_engine) as session:
-        job = Job(
-            id=job_id,
-            user_id=user_id,
-            stream_name=stream_name,
-            stream_date=stream_date,
-            folder_id=folder_id,
-            stream_file_id=stream_file_id,
-            webcam_file_id=webcam_file_id,
-            screen_file_id=screen_file_id,
-            status=JobStatus.PENDING.value,
-            progress=0,
-        )
-        session.add(job)
-        session.commit()
-        logger.info(f"Created job record: {job_id}")
+    try:
+        with Session(_sync_engine) as session:
+            job = Job(
+                id=job_id,
+                user_id=user_id,
+                stream_name=stream_name,
+                stream_date=stream_date,
+                folder_id=folder_id,
+                stream_file_id=stream_file_id,
+                webcam_file_id=webcam_file_id,
+                screen_file_id=screen_file_id,
+                status=JobStatus.PENDING.value,
+                progress=0,
+            )
+            session.add(job)
+            session.commit()
+            logger.info(f"Created job record: {job_id}")
+            return True
+    except IntegrityError:
+        # Duplicate: job already exists for this user+folder combo
+        logger.info(f"Job already exists for folder {folder_id}, skipping duplicate")
+        return False
 
 
 @shared_task
@@ -246,8 +256,10 @@ def _watch_folder(
             job_id = str(uuid.uuid4())
 
             # Create job record in database FIRST (prevents duplicate processing)
+            # If this returns False, it means another watcher cycle already created
+            # a job for this folder (race condition), so we skip it
             if user_id:
-                _create_job_record(
+                job_created = _create_job_record(
                     job_id=job_id,
                     user_id=user_id,
                     stream_name=folder_name,
@@ -257,7 +269,11 @@ def _watch_folder(
                     webcam_file_id=files["webcam"]["id"] if files["webcam"] else None,
                     screen_file_id=files["screen"]["id"] if files["screen"] else None,
                 )
+                if not job_created:
+                    # Duplicate detected, skip this folder
+                    continue
 
+            # Only send notifications and queue task if we successfully created the job
             # Notify via Telegram
             if telegram_chat_id:
                 telegram_service.send_message_sync(

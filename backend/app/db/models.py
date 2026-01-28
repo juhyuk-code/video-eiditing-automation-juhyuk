@@ -14,6 +14,7 @@ from sqlalchemy import (
     Text,
     ForeignKey,
     JSON,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -83,6 +84,10 @@ class Job(Base):
     """Processing job model."""
 
     __tablename__ = "jobs"
+    __table_args__ = (
+        # Prevent duplicate jobs for the same folder
+        UniqueConstraint("user_id", "folder_id", name="uq_job_user_folder"),
+    )
 
     id = Column(UUID(as_uuid=False), primary_key=True, default=generate_uuid)
     user_id = Column(UUID(as_uuid=False), ForeignKey("users.id"), nullable=False)
