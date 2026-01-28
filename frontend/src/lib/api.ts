@@ -1,6 +1,7 @@
 import { Job, JobsResponse, CurrentJobResponse } from './types';
 
-const API_BASE = '/api';
+// Direct API calls from browser to backend
+const API_BASE = 'http://localhost:8000/api';
 
 export async function fetchJobs(userId: string): Promise<JobsResponse> {
   const res = await fetch(`${API_BASE}/jobs?user_id=${userId}`);
